@@ -1,0 +1,280 @@
+#All NECs for binomial, count and normal data
+
+#1) NEC - binomial data  (a count out of a total, think %survival of individuals, % settlement)
+setwd("C:/Users/gricardo/OneDrive - Australian Institute of Marine Science/R/2019 demo")
+binom.data = read.table("https://pastebin.com/raw/zfrUha88", header= TRUE,dec=",")
+binom.data
+# Load packages (if not installed Tools->Install Packages)
+# library(lattice)
+# library(MASS)  
+# library (rstan) #Bayesian models
+
+##########################################
+#Data organising
+options(scipen = 999)  # turn off scientific notation
+binom.data$raw.x <- as.numeric(as.character(binom.data$raw.x))
+binom.data$suc <- as.numeric(as.character(binom.data$suc))
+binom.data$tot <- as.numeric(as.character(binom.data$tot))
+min.x <- min(binom.data$raw.x)
+max.x <- max(binom.data$raw.x)
+lg.x <- 100
+df.x <- data.frame(raw.x = seq(min.x, max.x, length = lg.x)) #setting up  new  data frame (df) defining log.x values to run 
+vec.x =df.x[,1]
+par(mfrow = c(1, 1)) #setting space for plots
+
+
+###########################################
+
+sim.dat.binom.data <- as.list(binom.data) #Bugs loves lists
+binom.data.data <- list(raw.x      = binom.data$raw.x,      #Response
+                   suc = binom.data$suc, #Covariate
+                   tot       = binom.data$tot,
+                   N       = nrow(binom.data))  #Sample size
+
+#Use this to visualise priors (you will need to checnge this in the model)
+# SD = 100
+# Reciprical  = 1/SD #recip of used in jags
+# 1/0.001
+# plot(seq(-250,250,.5),dnorm(seq(-250,250,.5),0.9,(SD)),type="l") #plot distribution of the normal. Note: jags distributions are often the reciprical of the R distribution, so an SD of 1000 would be 0.0001
+# plot(seq(0,500,.5),dgamma(seq(0,500,.5),0.0001,0.0001),type="l")
+# plot(seq(0,1,.1),dnorm(seq(0,1,.1),0.9,1000),type="l")  #truncated
+
+sink("binom.data_model.txt")
+cat("
+    model
+    {
+    # specify model priors
+    top~dnorm(0.9,0.0001)T(0,1)
+    beta~dgamma(0.0001,0.0001)
+    NEC~dnorm(30, 0.0001) T(0,)   #mean set to 30, contrained to >0
+    
+    # likelihood
+    for (i in 1:N)
+    {
+    # theta is true proportion at each dose - given by equation (2) in text
+    theta[i]<-top*exp(-beta*(raw.x[i]-NEC)*step((raw.x[i]-NEC)))
+    # response is suc (number surviving) - assumed to be binomial
+    suc[i]~dbin(theta[i],tot[i])
+    }
+    }
+    ", fill=TRUE)
+sink()  #Made model in working directory
+
+params <- c("top", "beta", "NEC")
+inits <- function(){list(top = 0.9, beta = 0.2, NEC = 30)}  #you will need to change this
+
+library(R2jags)
+J1.binom.data <- jags(data       = binom.data.data,
+                 inits      = inits,
+                 parameters = params,
+                 model      = "binom.data_model.txt",
+                 n.thin     = 10,
+                 n.chains   = 3,
+                 n.burnin   = 5000,
+                 n.iter     = 50000)
+
+J2.binom.data  <- update(J1.binom.data, n.iter = 10000, n.thin = 10)  
+out.binom.data <- J2.binom.data$BUGSoutput
+Beta.mcmc2 = out.binom.data$sims.list$NEC
+source(file = "MCMCSupportHighstatV4.R")
+source(file = "HighstatLibV10.R")
+library(MASS) 
+library(rjags)
+library(coda)
+library(lattice)
+MyBUGSChains(out.binom.data,c("top", "beta", "NEC"))
+print(out.binom.data, digits = 3)  #summary
+
+#plotting
+plot(binom.data$raw.x,(binom.data$suc/binom.data$tot),log = 'x',main="NEC-bayes") #first plot
+NEC.b = quantile(out.binom.data$sims.list$NEC,0.5, names = F)
+beta.b = quantile(out.binom.data$sims.list$beta,0.5, names = F)
+top.b = quantile(out.binom.data$sims.list$top,0.5, names = F)
+lines(seq(min.x, NEC.b), rep(quantile(out.binom.data$sims.list$top,0.5, names = F), length(seq(min.x, NEC.b))))  #this is the NEC line
+lines(NEC.b:max.x, top.b*exp(-beta.b*(NEC.b:max.x-NEC.b)))  #this is the decay line
+abline(v=NEC.b, lty=2, col = 2)
+
+
+################################################
+####################################################
+#2) NEC - count data  (think invidivuals, cells etc)
+count.data = read.table("https://pastebin.com/raw/ENgNSgf7", header= TRUE,dec=",")
+count.data
+count.data$raw.x <- as.numeric(as.character(count.data$raw.x))
+count.data$count <- as.numeric(as.character(count.data$count))
+min.x <- min(count.data$raw.x)
+max.x <- max(count.data$raw.x)
+lg.x <- 100
+df.x <- data.frame(raw.x = seq(min.x, max.x, length = lg.x)) #setting up  new  data frame (df) defining log.x values to run 
+vec.x =df.x[,1]
+par(mfrow = c(1, 1)) #setting space for plots
+sim.dat.count.data <- as.list(count.data) #Bugs loves lists
+count.data.data <- list(raw.x      = count.data$raw.x,      #Response
+                   count = count.data$count, #Covariate
+                   N       = nrow(count.data))  #Sample size
+
+#Use this to visualise priors (you will need to checnge this in the model)
+SD = 100
+Reciprical  = 1/SD #recip of used in jags
+1/0.001
+# plot(seq(-250,250,.5),dnorm(seq(-250,250,.5),0.9,(SD)),type="l") #plot distribution of the normal. Note: jags distributions are often the reciprical of the R distribution, so an SD of 1000 would be 0.0001
+# plot(seq(0,500,.5),dgamma(seq(0,500,.5),0.0001,0.0001),type="l")
+# plot(seq(0,1,.1),dnorm(seq(0,1,.1),0.9,1000),type="l")  #truncated
+
+sink("count.data_model.txt")
+cat("
+    model
+    {
+    # specify model priors
+    top~dnorm(100,0.0001)T(0,)
+    beta~dgamma(0.0001,0.0001)
+    NEC~dnorm(30, 0.0001) T(0,)   #mean set to 30, contrained to >0
+    
+    # likelihood
+    for (i in 1:N)
+    {
+    # theta is true count at each dose - given by equation (2) in text
+    theta[i]<-top*exp(-beta*(raw.x[i]-NEC)*step((raw.x[i]-NEC)))
+    # response is poisson
+    count[i]~dpois(theta[i])
+    }
+    }
+    ", fill=TRUE)
+sink()  #Made model in working directory
+
+params <- c("top", "beta", "NEC")
+inits <- function(){list(top = 100, beta = 0.2, NEC = 30)}  #you will need to change this
+
+
+library(R2jags)
+J1.count.data <- jags(data       = count.data.data,
+                 inits      = inits,
+                 parameters = params,
+                 model      = "count.data_model.txt",
+                 n.thin     = 10,
+                 n.chains   = 3,
+                 n.burnin   = 5000,
+                 n.iter     = 50000)
+
+J2.count.data  <- update(J1.count.data, n.iter = 10000, n.thin = 10)  
+out.count.data <- J2.count.data$BUGSoutput
+Beta.mcmc2 = out.count.data$sims.list$NEC
+source(file = "MCMCSupportHighstatV4.R")
+source(file = "HighstatLibV10.R")
+library(MASS) 
+library(rjags)
+library(coda)
+library(lattice)
+MyBUGSChains(out.count.data,c("top", "beta", "NEC"))
+print(out.count.data, digits = 3)  #summary
+
+#plotting
+plot(count.data$raw.x,count.data$count,log = 'x',main="NEC-bayes") #first plot
+NEC.b = quantile(out.count.data$sims.list$NEC,0.5, names = F)
+beta.b = quantile(out.count.data$sims.list$beta,0.5, names = F)
+top.b = quantile(out.count.data$sims.list$top,0.5, names = F)
+lines(seq(min.x, NEC.b), rep(quantile(out.count.data$sims.list$top,0.5, names = F), length(seq(min.x, NEC.b))))  #this is the NEC line
+lines(NEC.b:max.x, top.b*exp(-beta.b*(NEC.b:max.x-NEC.b)))  #this is the decay line
+abline(v=NEC.b, lty=2, col = 2)
+
+
+###################################################
+#3) NEC - measured/continuous data  (think anything on the metric scale)
+measure.data = read.table("https://pastebin.com/raw/pWeS6x0n", header= TRUE,dec=",")
+measure.data
+measure.data$raw.x <- as.numeric(as.character(measure.data$raw.x))
+measure.data$measure <- as.numeric(as.character(measure.data$measure))
+min.x <- min(measure.data$raw.x)
+max.x <- max(measure.data$raw.x)
+lg.x <- 100
+df.x <- data.frame(raw.x = seq(min.x, max.x, length = lg.x)) #setting up  new  data frame (df) defining log.x values to run 
+vec.x =df.x[,1]
+par(mfrow = c(1, 1)) #setting space for plots
+sim.dat.measure.data <- as.list(measure.data) #Bugs loves lists
+measure.data.data <- list(raw.x      = measure.data$raw.x,      #Response
+                        measure = measure.data$measure, #Covariate
+                        N       = nrow(measure.data))  #Sample size
+
+
+sim.dat.measure.data <- as.list(measure.data) #Bugs loves lists
+measure.data.data <- list(raw.x      = measure.data$raw.x,      #Response
+                   measure = measure.data$measure, #Covariate
+                   N       = nrow(measure.data))  #Sample size
+
+#Use this to visualise priors (you will need to checnge this in the model)
+SD = 100
+Reciprical  = 1/SD #recip of used in jags
+1/0.001
+# plot(seq(-250,250,.5),dnorm(seq(-250,250,.5),0.9,(SD)),type="l") #plot distribution of the normal. Note: jags distributions are often the reciprical of the R distribution, so an SD of 1000 would be 0.0001
+# plot(seq(0,500,.5),dgamma(seq(0,500,.5),0.0001,0.0001),type="l")
+# plot(seq(0,1,.1),dnorm(seq(0,1,.1),0.9,1000),type="l")  #truncated
+
+sink("measure.data_model.txt")
+cat("
+    model
+    {
+    # specify model priors
+    top~dnorm(100,0.0001)T(0,)
+    beta~dgamma(0.0001,0.0001)
+    NEC~dnorm(30, 0.0001) T(0,)   #mean set to 30, contrained to >0
+    tau~dnorm(5, 0.0001)
+    
+    # likelihood
+    for (i in 1:N)
+    {
+    # theta is true count at each dose - given by equation (2) in text
+    theta[i]<-top*exp(-beta*(raw.x[i]-NEC)*step((raw.x[i]-NEC)))
+    # response is poisson
+    measure[i]~dnorm(theta[i], tau)
+    }
+    }
+    ", fill=TRUE)
+sink()  #Made model in working directory
+
+params <- c("top", "beta", "NEC", 'tau')
+inits <- function(){list(top = 100, beta = 0.2, NEC = 30, tau = 5)}  #you will need to change this
+
+
+library(R2jags)
+J1.measure.data <- jags(data       = measure.data.data,
+                 inits      = inits,
+                 parameters = params,
+                 model      = "measure.data_model.txt",
+                 n.thin     = 10,
+                 n.chains   = 3,
+                 n.burnin   = 5000,
+                 n.iter     = 50000)
+
+J2.measure.data  <- update(J1.measure.data, n.iter = 10000, n.thin = 10)  
+out.measure.data <- J2.measure.data$BUGSoutput
+Beta.mcmc2 = out.measure.data$sims.list$NEC
+source(file = "MCMCSupportHighstatV4.R")
+source(file = "HighstatLibV10.R")
+library(MASS) 
+library(rjags)
+library(coda)
+library(lattice)
+MyBUGSChains(out.measure.data,c("top", "beta", "NEC"))
+print(out.measure.data, digits = 3)  #summary
+
+#plotting
+plot(measure.data$raw.x,measure.data$measure,log = 'x',main="NEC-bayes") #first plot
+NEC.b = quantile(out.measure.data$sims.list$NEC,0.5, names = F)
+NEC.b.lower = quantile(out.measure.data$sims.list$NEC,0.025, names = F)
+NEC.b.upper = quantile(out.measure.data$sims.list$NEC,0.975, names = F)
+beta.b = quantile(out.measure.data$sims.list$beta,0.5, names = F)
+top.b = quantile(out.measure.data$sims.list$top,0.5, names = F)
+lines(seq(min.x, NEC.b), rep(quantile(out.measure.data$sims.list$top,0.5, names = F), length(seq(min.x, NEC.b))))  #this is the NEC line
+lines(NEC.b:max.x, top.b*exp(-beta.b*(NEC.b:max.x-NEC.b)))  #this is the decay line
+abline(v=NEC.b, lty=2, col = 2)
+library(ggplot2)
+p1 = ggplot()+geom_point(data = measure.data, aes(x = measure.data$raw.x, y=measure.data$measure), color = 'grey70')
+p1 = p1 + geom_line(aes(x = NEC.b:max.x, y = top.b*exp(-beta.b*(NEC.b:max.x-NEC.b))), color = 'grey40', size=1)  #decay line
+p1 = p1 + geom_line( aes(x = seq(min.x, NEC.b), y = rep(quantile(out.measure.data$sims.list$top,0.5, names = F), length(seq(min.x, NEC.b)))), color = 'grey40', size=1)  #no effect line
+p1 = p1 + geom_line( aes(x = seq(NEC.b.lower, NEC.b.upper), y =top.b ), color = 'indianred2', size=2)
+p1 = p1 + geom_line( aes(x = NEC.b, y =seq(0, top.b )), color = 'indianred2', size=2,  linetype = "dashed")
+p1 = p1+ scale_x_log10(name ="Concentration", limits = c(min(measure.data$raw.x),max(measure.data$raw.x)))
+p1 = p1 + scale_y_continuous(name ="Measures") 
+p1 =  p1 +  theme_classic()
+p1 = p1 + theme(legend.position="none")
+p1
