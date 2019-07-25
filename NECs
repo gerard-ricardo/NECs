@@ -61,7 +61,7 @@ cat("
 sink()  #Made model in working directory
 
 params <- c("top", "beta", "NEC")
-inits <- function(){list(top = 0.9, beta = 0.2, NEC = 30)}  #you will need to change this
+inits <- function(){list(top = rnorm(1,0.9,0.01), beta = rnorm(1,0.2,0.1), NEC = rnorm(1,30,10))}  #you will need to change this
 
 library(R2jags)
 J1.binom.data <- jags(data       = binom.data.data,
@@ -143,7 +143,7 @@ cat("
 sink()  #Made model in working directory
 
 params <- c("top", "beta", "NEC")
-inits <- function(){list(top = 100, beta = 0.2, NEC = 30)}  #you will need to change this
+inits <- function(){list(top = rnorm(1,100,20), beta = rnorm(1,0.2,0.1), NEC = rnorm(1,30,10))}  #you will need to change this (the second value)
 
 
 library(R2jags)
@@ -196,10 +196,6 @@ measure.data.data <- list(raw.x      = measure.data$raw.x,      #Response
                         N       = nrow(measure.data))  #Sample size
 
 
-sim.dat.measure.data <- as.list(measure.data) #Bugs loves lists
-measure.data.data <- list(raw.x      = measure.data$raw.x,      #Response
-                   measure = measure.data$measure, #Covariate
-                   N       = nrow(measure.data))  #Sample size
 
 #Use this to visualise priors (you will need to checnge this in the model)
 SD = 100
@@ -214,10 +210,13 @@ cat("
     model
     {
     # specify model priors
-    top~dnorm(100,0.0001)T(0,)
+    top~dnorm(100,0.0001)T(0,)  #note, all SD are recipricals
     beta~dgamma(0.0001,0.0001)
     NEC~dnorm(30, 0.0001) T(0,)   #mean set to 30, contrained to >0
-    tau~dnorm(5, 0.0001)
+    sigma ~ dunif(0, 20)  #sigma is the SD
+    tau  = 1 / (sigma * sigma)  #tau is the reciprical of the variance
+    
+    
     
     # likelihood
     for (i in 1:N)
@@ -231,8 +230,9 @@ cat("
     ", fill=TRUE)
 sink()  #Made model in working directory
 
-params <- c("top", "beta", "NEC", 'tau')
-inits <- function(){list(top = 100, beta = 0.2, NEC = 30, tau = 5)}  #you will need to change this
+params <- c("top", "beta", "NEC", 'sigma')
+#inits  <- function () {list(top  = rnorm(2, mean = 0, sd = 0.1),sigma = runif(1, 0, 20))}
+inits <- function(){list(top = rnorm(1,100,20), beta = rnorm(1,0.2,0.1), NEC = rnorm(1,30,10), sigma = runif(1, 0,5))}  #you will need to change this
 
 
 library(R2jags)
